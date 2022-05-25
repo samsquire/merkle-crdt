@@ -144,8 +144,9 @@ class MerkleClock:
     for value in sorted(self.children, key=attrgetter("timestamp")):
       key = value.key
       
-      if type(value.value) == dict and key not in data[self.key]:
+      if type(value.value) == dict and (type(data[self.key][key]) == dict or key not in data[self.key] or self.key not in data):
         merge(data[self.key][key], value.value)
+      
         
         
       else:
@@ -153,51 +154,59 @@ class MerkleClock:
       
     
     return data
-    
 
-  
+  def wrap(self, new_children, source):
+    new_cache = dict(source.cache)
+    root_cid = sha256("".join([clock.cid for clock in new_children]).encode("utf8")).hexdigest()
+    
+    
+    new_root = MerkleClock(root_cid, self.database, "root", "", new_children, None, new_cache)
+    new_root.timestamp = max(new_children, key=attrgetter("timestamp")).timestamp
+    return new_root, root_cid
+
+  def rootmerge(self, clock, path=""):
+    return self.merge(self.wrap([clock], clock)[0], path)
   
   def merge(self, clock, path=""):
     new_children = OrderedSet()
-    new_cache = dict(self.cache)
+    
+    
     for child in self.children:
       for merge_child in clock.children:
-        print("merging")
-        print(path)
-        print(child.key)
+        
         if path + child.key == path + merge_child.key:
+          
           if type(child.value) == dict and type(merge_child.value) == dict:
             merged = child.merge(merge_child, path + child.key)
-            new_children.add(merged)
+            
+            new_children.append(merged)
+            
           
-          
-            new_cache[child.key] = merged
+            
           else:
+            
             if merge_child.timestamp > child.timestamp:
               new_children.add(merge_child)
-            elif merge_child.timestamp < child.timestamp:
+            elif child.timestamp > merge_child.timestamp:
               new_children.add(child)
             elif merge_child.user > child.user:
               new_children.add(child)
             elif child.user > merge_child.user:
               new_children.add(merge_child)
-        else:
+        
           
-          new_children.add(merge_child)
-          new_children.add(child)
-          new_cache[child.key] = child
-          new_cache[merge_child.key] = merge_child
+          
+       
 
     new_children |= clock.children
     new_children |= self.children
 
     
     
-    root_cid = sha256("".join([clock.cid for clock in new_children]).encode("utf8")).hexdigest()
+
     
     
-    new_root = MerkleClock(root_cid, self.database, "", "", new_children, None, new_cache)
-    new_root.timestamp = max(new_children, key=attrgetter("timestamp")).timestamp
+    new_root, root_cid = self.wrap(new_children, self)
     self.database[root_cid] = new_root
     
     return new_root
@@ -234,13 +243,24 @@ data = dict(merged.inflate())
 print("merge direction 1")
 pprint(data)
 
-merged2 = m3.merge(m4)
+print("other way merge")
+merged2 = a3.merge(m4)
 
 for child in merged2.children:
-  print("other way merge")
-  print(child)
+  print("key")
+  print(child.key)
 
 data2 = dict(merged2.inflate())
 pprint(data2)
 
- 
+s1 = MerkleClock.new_root(database)
+s2 = s1.set(1, "amazing", "yes")
+s3 = s2.set(1, "three", "five")
+s4 = s3.set(1, "hello", {
+  "hi": {"another": "7", "conflict": 3}
+})
+
+print("Merge of root element")
+merged3 = merged2.merge(s4)
+data3 = dict(merged3.inflate())
+pprint(data3)
