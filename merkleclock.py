@@ -2,6 +2,7 @@ from hashlib import sha256
 from collections import OrderedDict, defaultdict
 from ordered_set import OrderedSet
 from datetime import datetime
+from operator import attrgetter
 from pprint import pprint
 import random
 database = {}
@@ -138,7 +139,7 @@ class MerkleClock:
     data = defaultdict(lambda:  defaultdict(defaultdict))
     
     
-    for value in self.children:
+    for value in sorted(self.children, key=attrgetter("timestamp")):
       key = value.key
       
       if type(value.value) == dict:
@@ -146,7 +147,7 @@ class MerkleClock:
         
         
       else:
-        data[self.key] = value.inflate()
+        data[self.key][key] = value.inflate()
       
     
     return data
@@ -194,7 +195,7 @@ class MerkleClock:
     
     
     new_root = MerkleClock(root_cid, self.database, "", "", new_children, None, new_cache)
-    
+    new_root.timestamp = max(new_children, key=attrgetter("timestamp")).timestamp
     self.database[root_cid] = new_root
     
     return new_root
@@ -227,4 +228,13 @@ for child in merged.children:
 
 data = dict(merged.inflate())
 pprint(data)
+
+merged2 = m3.merge(m4)
+
+for child in merged2.children:
+  print("other way merge")
+  print(child)
+
+data2 = dict(merged2.inflate())
+pprint(data2)
 
