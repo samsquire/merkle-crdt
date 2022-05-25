@@ -68,19 +68,20 @@ class MerkleClock:
     data += "}\n"
     return data
     
-  def set(self, key, value, timestamp=None):
+  def set(self, user, key, value, timestamp=None):
     if timestamp == None:
       timestamp = datetime.now()
     if type(value) == dict:
       last = MerkleClock.new_root(database)
       hash = ""
+      last.user = user
       
 
       new_children = OrderedSet(self.children)
       cachevalues = {}
       for lkey, subvalue in value.items():
         
-        last = last.set(lkey, subvalue, timestamp)
+        last = last.set(user, lkey, subvalue, timestamp)
         cachevalues[lkey] = last
         
         
@@ -110,7 +111,7 @@ class MerkleClock:
       for lkey, subvalue in value.items():
         new_root.cache[lkey] = cachevalues[lkey]
         
-      
+      new_root.user = user
       return new_root
     if type(value) == str or type(value) == int:
       new_children = OrderedSet(self.children)
@@ -118,7 +119,7 @@ class MerkleClock:
       
       new_keyvalue = MerkleClock(new_cid, self.database, key, value, OrderedSet(), self, None)
       new_keyvalue.timestamp = timestamp
-      
+      new_keyvalue.user = user
       new_children.add(new_keyvalue)
 
 
@@ -126,6 +127,7 @@ class MerkleClock:
       new_root = MerkleClock(root_cid, self.database, "", "", new_children, None, self.cache)
       self.database[root_cid] = new_root
       new_root.timestamp = timestamp
+      new_root.user = user
       self.database[new_cid] = new_keyvalue
       if key in new_root.cache:
        new_children.remove(self.cache[key])
@@ -142,12 +144,12 @@ class MerkleClock:
     for value in sorted(self.children, key=attrgetter("timestamp")):
       key = value.key
       
-      if type(value.value) == dict:
+      if type(value.value) == dict and key not in data[self.key]:
         merge(data[self.key][key], value.value)
         
         
       else:
-        data[self.key][key] = value.inflate()
+        data[self.key][key] = value.value
       
     
     return data
@@ -204,9 +206,10 @@ class MerkleClock:
 
       
 m1 = MerkleClock.new_root(database)
-m2 = m1.set("hello", "world")
-m3 = m2.set("hello", "world2")
-m4 = m3.set("hello", {
+ma = m1.set(0, "one", "two")
+m2 = ma.set(0, "hello", "world")
+m3 = m2.set(0, "hello", "world2")
+m4 = m3.set(0, "hello", {
   "hi": {"world": "6", "conflict": 1}
 })
 
@@ -214,8 +217,9 @@ m4 = m3.set("hello", {
 print(m4.lookup("hello"))
 
 a1 = MerkleClock.new_root(database)
-a2 = a1.set("world", "hi")
-a3 = a2.set("hello", {
+a2 = a1.set(1, "world", "hi")
+am = a2.set(1, "three", "four")
+a3 = am.set(1, "hello", {
   "hi": {"another": "7", "conflict": 0}
 })
 merged = m4.merge(a3)
@@ -227,6 +231,7 @@ for child in merged.children:
   print(child.value)
 
 data = dict(merged.inflate())
+print("merge direction 1")
 pprint(data)
 
 merged2 = m3.merge(m4)
@@ -237,4 +242,4 @@ for child in merged2.children:
 
 data2 = dict(merged2.inflate())
 pprint(data2)
- 
+
